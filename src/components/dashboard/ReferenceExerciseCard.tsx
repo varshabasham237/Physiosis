@@ -1,100 +1,132 @@
 /**
  * ReferenceExerciseCard.tsx
- * Shows the currently loaded reference exercise definition,
- * its phases, and target joint angle ranges.
+ * Shows the currently loaded reference exercise with animated skeleton demonstration.
+ *
+ * Passes the full live analysis snapshot to ReferenceSkeletonCanvas so that
+ * PRACTICE mode can read movement state and feedback from the existing pipeline.
  */
 
 import React from 'react';
-import { BookOpen, ChevronRight } from 'lucide-react';
-import { ExerciseRegistry } from '../../engine/exercise/ExerciseRegistry';
-import type { ExerciseDefinition } from '../../types/exercise';
+import { BookOpen } from 'lucide-react';
+import { ExerciseRegistry, getDefaultExercise } from '../../engine/exercise/ExerciseRegistry';
+import { ReferenceSkeletonCanvas } from '../skeleton/ReferenceSkeletonCanvas';
+import type { ExerciseDefinition } from '../../engine/exercise/ExerciseTypes';
+import type { RepResult } from '../../engine/session/SessionTypes';
+import type { ShoulderFlexionAnalysis } from '../../engine/biomechanics/biomechanicsTypes';
 
-const BODY_AREA_LABELS: Record<ExerciseDefinition['bodyArea'], string> = {
-  shoulder: 'Shoulder',
-  elbow: 'Elbow',
-  wrist: 'Wrist',
-  hip: 'Hip',
-  knee: 'Knee',
-  ankle: 'Ankle',
-  spine: 'Spine',
-  'full-body': 'Full Body',
-};
+import type { PhaseConfig } from '../../engine/exercise/PoseTypes';
 
 const DIFFICULTY_LABELS: Record<ExerciseDefinition['difficulty'], string> = {
-  beginner: 'Beginner',
+  beginner:     'Beginner',
   intermediate: 'Intermediate',
-  advanced: 'Advanced',
+  advanced:     'Advanced',
 };
 
 interface ReferenceExerciseCardProps {
+  mode?: 'TUTORIAL' | 'PRACTICE' | 'LIVE' | 'DEMO';
+  onStartPractice?: () => void;
+  onBackToTutorial?: () => void;
+  onExitDemoMode?: () => void;
+  exercise?: ExerciseDefinition;
   exerciseId?: string;
+  liveAngle?: number | null;
+  lastLimitationPeak?: number | null;
+  latestRep?: RepResult | null;
+  /** Full live analysis — forwarded to practice mode for state + feedback */
+  liveAnalysis?: ShoulderFlexionAnalysis | null;
+  onDemoFrame?: (angleDeg: number, phaseConfig: PhaseConfig, elapsedMs: number) => void;
 }
 
 export const ReferenceExerciseCard: React.FC<ReferenceExerciseCardProps> = ({
-  exerciseId = 'shoulder-abduction',
+  mode = 'TUTORIAL',
+  onStartPractice,
+  onBackToTutorial,
+  onExitDemoMode,
+  exercise: propExercise,
+  exerciseId,
+  liveAngle,
+  lastLimitationPeak,
+  latestRep,
+  liveAnalysis,
+  onDemoFrame,
 }) => {
-  const exercise = ExerciseRegistry.getById(exerciseId);
+  const exercise =
+    propExercise ??
+    (exerciseId ? ExerciseRegistry.getById(exerciseId) : getDefaultExercise()) ??
+    getDefaultExercise();
 
-  if (!exercise) {
-    return (
-      <div className="card reference-exercise-card">
-        <div className="card__header">
-          <div className="card__header-left">
-            <BookOpen size={16} />
-            <span className="card__title">Reference Exercise</span>
-          </div>
-        </div>
-        <p className="reference-exercise-card__empty">Exercise not found.</p>
-      </div>
-    );
-  }
+  const isPractice = mode === 'PRACTICE';
+  const isDemo = mode === 'DEMO';
 
   return (
     <div className="card reference-exercise-card">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="card__header">
         <div className="card__header-left">
           <BookOpen size={16} />
-          <span className="card__title">Reference Exercise</span>
+          <div>
+            <span className="card__title">
+              {isPractice ? 'Live Practice' : isDemo ? 'Demonstration (Demo Mode)' : 'Reference Demonstration'}
+            </span>
+            {!isPractice && (
+              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', fontWeight: 500 }}>
+                {isDemo ? 'Deterministic 16s demonstration — not patient data' : 'Reference tutorial — not patient data'}
+              </span>
+            )}
+          </div>
         </div>
         <div className="card__header-right">
-          <span className={`difficulty-badge difficulty-badge--${exercise.difficulty}`}>
-            {DIFFICULTY_LABELS[exercise.difficulty]}
-          </span>
+          {isPractice ? (
+            <span className="live-indicator">
+              <span className="live-indicator__dot" />
+              LIVE PRACTICE
+            </span>
+          ) : isDemo ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="engine-badge engine-badge--amber" style={{ padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                DEMO
+              </span>
+              <span className={`difficulty-badge difficulty-badge--${exercise.difficulty}`}>
+                {DIFFICULTY_LABELS[exercise.difficulty]}
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="session-status-badge session-status-badge--idle">TUTORIAL</span>
+              <span className={`difficulty-badge difficulty-badge--${exercise.difficulty}`}>
+                {DIFFICULTY_LABELS[exercise.difficulty]}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Exercise name and meta */}
+      {/* ── Exercise name + brief description ──────────────────────────── */}
       <div className="reference-exercise-card__info">
         <h3 className="reference-exercise-card__name">{exercise.name}</h3>
         <p className="reference-exercise-card__description">{exercise.description}</p>
-
         <div className="reference-exercise-card__meta">
-          <span className="meta-pill">{BODY_AREA_LABELS[exercise.bodyArea]}</span>
-          <span className="meta-pill">{exercise.defaultSets} × {exercise.defaultReps} reps</span>
+          <span className="meta-pill">{exercise.side === 'right' ? 'Right Side' : 'Bilateral'}</span>
+          <span className="meta-pill">{exercise.plane}</span>
+          <span className="meta-pill">Target: {exercise.targetAngle}°</span>
         </div>
       </div>
 
-      {/* Phase list */}
+      {/* ── Animated reference skeleton / Live practice panel ─────────── */}
       <div className="card__divider" />
-      <div className="reference-exercise-card__phases">
-        <p className="analysis-card__section-label">Phases</p>
-        <ol className="phase-list" role="list">
-          {exercise.phases.map((phase, idx) => (
-            <li key={phase.id} className="phase-row">
-              <span className="phase-row__index">{idx + 1}</span>
-              <div className="phase-row__body">
-                <span className="phase-row__label">{phase.label}</span>
-                {phase.targets.map((t) => (
-                  <span key={t.descriptor.label} className="phase-row__target">
-                    <ChevronRight size={11} aria-hidden="true" />
-                    {t.descriptor.label}: {t.minDeg}° – {t.maxDeg}°
-                  </span>
-                ))}
-              </div>
-            </li>
-          ))}
-        </ol>
+      <div className="reference-exercise-card__skeleton">
+        <ReferenceSkeletonCanvas
+          mode={mode}
+          onStartPractice={onStartPractice}
+          onBackToTutorial={onBackToTutorial}
+          onExitDemoMode={onExitDemoMode}
+          exercise={exercise}
+          liveAngle={liveAngle}
+          lastLimitationPeak={lastLimitationPeak}
+          latestRep={latestRep}
+          liveAnalysis={liveAnalysis}
+          onDemoFrame={onDemoFrame}
+        />
       </div>
     </div>
   );

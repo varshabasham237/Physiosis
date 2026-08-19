@@ -9,9 +9,19 @@ import { ENGINE_STATUS_META } from '../../types/engine';
 
 interface EngineStatusBadgeProps {
   status: EngineStatus;
+  mode?: 'TUTORIAL' | 'PRACTICE' | 'LIVE' | 'DEMO';
 }
 
-export const EngineStatusBadge: React.FC<EngineStatusBadgeProps> = ({ status }) => {
+export const EngineStatusBadge: React.FC<EngineStatusBadgeProps> = ({ status, mode }) => {
+  if (mode === 'DEMO') {
+    return (
+      <div className="engine-badge engine-badge--amber" role="status" aria-label="Engine status: Demo Mode">
+        <span className="engine-badge__dot engine-badge__dot--pulse" style={{ background: '#FFA726' }} />
+        <span className="engine-badge__label" style={{ color: '#FFA726', fontWeight: 600 }}>DEMO MODE</span>
+      </div>
+    );
+  }
+
   const meta = ENGINE_STATUS_META[status];
 
   return (

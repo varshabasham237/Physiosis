@@ -15,6 +15,17 @@ export function formatElapsedTime(ms: number): string {
 }
 
 /**
+ * Format seconds as "MM:SS" countdown string.
+ * E.g. 120 → "02:00", 9 → "00:09", 0 → "00:00"
+ */
+export function formatTimerMMSS(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
  * Format a [0, 100] score as a rounded integer string.
  * E.g. 87.3 → "87"
  */
